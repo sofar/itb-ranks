@@ -78,6 +78,9 @@ ranks.fetch = function()
 		ranks.sync_auto_series()
 	end
 
+	-- "everything" series: all accepted boxes
+	ranks.sync_everything_series()
+
 	minetest.after(300, ranks.fetch)
 end
 
@@ -145,6 +148,53 @@ function ranks.sync_auto_series()
 		end
 
 		::continue::
+	end
+end
+
+function ranks.sync_everything_series()
+	local all_series = db.series_get_series()
+	local series_id
+	for _, s in ipairs(all_series) do
+		if s.name == "everything" then
+			series_id = s.id
+			break
+		end
+	end
+
+	if not series_id then
+		series_id = db.series_create("everything")
+		if not series_id then
+			minetest.log("error", "ranks: failed to create everything series")
+			return
+		end
+	end
+
+	-- ensure meta
+	local smeta = db.series_get_meta(series_id)
+	if smeta then
+		local changed = false
+		if not smeta.meta.auto then
+			smeta.meta.auto = true
+			changed = true
+		end
+		if smeta.meta.type ~= db.RANDOM_ACCESS_TYPE then
+			smeta.meta.type = db.RANDOM_ACCESS_TYPE
+			changed = true
+		end
+		if changed then
+			db.series_set_meta(series_id, smeta)
+		end
+	end
+
+	local new_ids = db.box_get_accepted_ids()
+	local current = db.series_get_boxes(series_id)
+	if not lists_equal(current, new_ids) then
+		db.series_clear_boxes(series_id)
+		for order, box_id in ipairs(new_ids) do
+			db.series_insert_box(series_id, box_id, order)
+		end
+		minetest.log("action", "ranks: updated everything series (id=" ..
+			series_id .. ") with " .. #new_ids .. " boxes")
 	end
 end
 
